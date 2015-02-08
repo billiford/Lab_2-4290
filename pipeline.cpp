@@ -126,11 +126,11 @@ void pipe_cycle(Pipeline *p)
  
 void pipe_cycle_WB(Pipeline *p){
 	int ii;
-	/* printf("\n\nWB valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
+	/*printf("\n\nWB valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			p->pipe_latch[MEM_LATCH][ii].valid ? "true" : "false", 
 			p->pipe_latch[MEM_LATCH][ii].op_id, 
 			p->pipe_latch[MEM_LATCH][ii].stall ? "true" : "false", 
-			p->pipe_latch[MEM_LATCH][ii].is_mispred_cbr ? "true" : "false"); */
+			p->pipe_latch[MEM_LATCH][ii].is_mispred_cbr ? "true" : "false");*/
 	for(ii=0; ii<PIPE_WIDTH; ii++){
 		if(p->pipe_latch[MEM_LATCH][ii].valid){
 			p->stat_retired_inst++;
@@ -152,13 +152,14 @@ void pipe_cycle_MEM(Pipeline *p){
 			p->pipe_latch[MEM_LATCH][ii].op_id == 
 			p->pipe_latch[ID_LATCH][ii].op_id) {
 			p->pipe_latch[ID_LATCH][ii].stall = false;
+			p->pipe_latch[ID_LATCH][ii].valid = true;
 			//printf("\nchanged stall to false in MEM");
 		}
-		if (!p->pipe_latch[MEM_LATCH][ii].valid &&
+		/* if (!p->pipe_latch[MEM_LATCH][ii].valid &&
 			p->pipe_latch[MEM_LATCH][ii].op_id != 
 			p->pipe_latch[EX_LATCH][ii].op_id) {
 			p->pipe_latch[MEM_LATCH][ii].valid = true;
-		}
+		} */
 		/* printf("\nMEM valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			p->pipe_latch[MEM_LATCH][ii].valid ? "true" : "false", 
 			p->pipe_latch[MEM_LATCH][ii].op_id, 
@@ -183,9 +184,10 @@ void pipe_cycle_EX(Pipeline *p){
 			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
 			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest)) {
 			p->pipe_latch[ID_LATCH][ii].stall = false;
+			p->pipe_latch[ID_LATCH][ii].valid = true;
 			//printf("\nchanged stall to false in MEM");
 		}
-		if (!p->pipe_latch[EX_LATCH][ii].valid &&
+		/*if (!p->pipe_latch[EX_LATCH][ii].valid &&
 			p->pipe_latch[EX_LATCH][ii].op_id != 
 			p->pipe_latch[ID_LATCH][ii].op_id &&
 			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg == 
@@ -193,7 +195,7 @@ void pipe_cycle_EX(Pipeline *p){
 			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
 			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest)) {
 			p->pipe_latch[EX_LATCH][ii].valid = true;
-		}
+		} */
 		/* printf("\nEX valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			p->pipe_latch[EX_LATCH][ii].valid ? "true" : "false", 
 			p->pipe_latch[EX_LATCH][ii].op_id, 
@@ -223,11 +225,11 @@ void pipe_cycle_ID(Pipeline *p){
 			p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg) ||
 			(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
 			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest == 
-			p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg)) &&
-			p->pipe_latch[EX_LATCH][ii].op_id !=
-			p->pipe_latch[ID_LATCH][ii].op_id ||
+			p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg) ||
 			(p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write &&
-			p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)) {
+			p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)) &&
+			(p->pipe_latch[EX_LATCH][ii].op_id !=
+			p->pipe_latch[ID_LATCH][ii].op_id)) {
 			p->pipe_latch[ID_LATCH][ii].stall = true;
 			p->pipe_latch[ID_LATCH][ii].valid = false;
 			//printf("\nchanged stall to true in ID : src1: %u", 
@@ -258,7 +260,9 @@ void pipe_cycle_FE(Pipeline *p){
 	bool tr_read_success;
 
 	for(ii=0; ii<PIPE_WIDTH; ii++){
-		if (!p->pipe_latch[ID_LATCH][ii].stall)
+		if (!p->pipe_latch[ID_LATCH][ii].stall ||
+			!(p->pipe_latch[ID_LATCH][ii].op_id ==
+			p->pipe_latch[EX_LATCH][ii].op_id))
 			pipe_get_fetch_op(p, &fetch_op);
 
 			
@@ -284,7 +288,9 @@ void pipe_cycle_FE(Pipeline *p){
 		
 		// copy the op in FE LATCH
 		//if (!p->pipe_latch[ID_LATCH][ii].stall)
-		if (!p->pipe_latch[ID_LATCH][ii].stall)
+		if (!p->pipe_latch[ID_LATCH][ii].stall ||
+			!(p->pipe_latch[ID_LATCH][ii].op_id ==
+			p->pipe_latch[EX_LATCH][ii].op_id))
 			p->pipe_latch[FE_LATCH][ii] = fetch_op;
 		/* printf("\nFE valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			fetch_op.valid ? "true" : "false", 

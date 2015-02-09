@@ -123,15 +123,15 @@ void pipe_cycle(Pipeline *p)
 /**********************************************************************
  * -----------  DO NOT MODIFY THE CODE ABOVE THIS LINE ----------------
  **********************************************************************/
- 
+
+int cc_w = 0;
+int cc_r = 0; 
+static Pipeline *pipe_array[2];
+
 void pipe_cycle_WB(Pipeline *p){
 	int ii;
-	/*printf("\n\nWB valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
-			p->pipe_latch[MEM_LATCH][ii].valid ? "true" : "false", 
-			p->pipe_latch[MEM_LATCH][ii].op_id, 
-			p->pipe_latch[MEM_LATCH][ii].stall ? "true" : "false", 
-			p->pipe_latch[MEM_LATCH][ii].is_mispred_cbr ? "true" : "false");*/
-	for(ii=0; ii<PIPE_WIDTH; ii++){
+	
+	for(ii = 0; ii < PIPE_WIDTH; ii++){
 		if(p->pipe_latch[MEM_LATCH][ii].valid){
 			p->stat_retired_inst++;
 			if(p->pipe_latch[MEM_LATCH][ii].op_id >= p->halt_op_id){
@@ -145,21 +145,44 @@ void pipe_cycle_WB(Pipeline *p){
 
 void pipe_cycle_MEM(Pipeline *p){
 	int ii;
-	for(ii=0; ii<PIPE_WIDTH; ii++){
+	int j;
+	for(ii = 0; ii < PIPE_WIDTH; ii++){
 		//if (!p->pipe_latch[ID_LATCH][ii].stall)
 		p->pipe_latch[MEM_LATCH][ii] = p->pipe_latch[EX_LATCH][ii];
-		if (p->pipe_latch[ID_LATCH][ii].stall &&
-			p->pipe_latch[MEM_LATCH][ii].op_id == 
-			p->pipe_latch[ID_LATCH][ii].op_id) {
-			p->pipe_latch[ID_LATCH][ii].stall = false;
-			p->pipe_latch[ID_LATCH][ii].valid = true;
-			//printf("\nchanged stall to false in MEM");
-		}
-		/* if (!p->pipe_latch[MEM_LATCH][ii].valid &&
-			p->pipe_latch[MEM_LATCH][ii].op_id != 
-			p->pipe_latch[EX_LATCH][ii].op_id) {
-			p->pipe_latch[MEM_LATCH][ii].valid = true;
-		} */
+	
+		/* if (PIPE_WIDTH > 1) {
+			for (j = 0; j < 2; j++) {
+				if (pipe_array[j] != NULL &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].stall &&
+					p->pipe_latch[MEM_LATCH][ii].op_id == 
+					pipe_array[j]->pipe_latch[ID_LATCH][j].op_id) {
+					pipe_array[j]->pipe_latch[ID_LATCH][j].stall = false;
+					//p->pipe_latch[ID_LATCH][ii].valid = true;
+				}
+				if (pipe_array[j] != NULL &&
+					!p->pipe_latch[MEM_LATCH][ii].valid &&
+					p->pipe_latch[MEM_LATCH][ii].op_id != 
+					pipe_array[j]->pipe_latch[EX_LATCH][j].op_id) {
+					p->pipe_latch[MEM_LATCH][ii].valid = true;
+				}
+			}
+		} else { */
+			if (p->pipe_latch[ID_LATCH][ii].stall &&
+				p->pipe_latch[MEM_LATCH][ii].op_id == 
+				p->pipe_latch[ID_LATCH][ii].op_id &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.cc_write)) {
+				p->pipe_latch[ID_LATCH][ii].stall = false;
+				//p->pipe_latch[ID_LATCH][ii].valid = true;
+			}
+			if (!p->pipe_latch[MEM_LATCH][ii].valid &&
+				p->pipe_latch[MEM_LATCH][ii].op_id != 
+				p->pipe_latch[EX_LATCH][ii].op_id &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.cc_write)) {
+				p->pipe_latch[MEM_LATCH][ii].valid = true;
+			}
+		//}
 		/* printf("\nMEM valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			p->pipe_latch[MEM_LATCH][ii].valid ? "true" : "false", 
 			p->pipe_latch[MEM_LATCH][ii].op_id, 
@@ -172,31 +195,86 @@ void pipe_cycle_MEM(Pipeline *p){
 
 void pipe_cycle_EX(Pipeline *p){
 	int ii;
-	for(ii=0; ii<PIPE_WIDTH; ii++){
+	int j = 0;
+	for(ii = 0; ii < PIPE_WIDTH; ii++){
 
 		//if (!p->pipe_latch[ID_LATCH][ii].stall)
-		p->pipe_latch[EX_LATCH][ii]=p->pipe_latch[ID_LATCH][ii];
-		if (p->pipe_latch[ID_LATCH][ii].stall &&
-			p->pipe_latch[EX_LATCH][ii].op_id == 
-			p->pipe_latch[ID_LATCH][ii].op_id &&
-			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg == 
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
-			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest)) {
-			p->pipe_latch[ID_LATCH][ii].stall = false;
-			p->pipe_latch[ID_LATCH][ii].valid = true;
-			//printf("\nchanged stall to false in MEM");
-		}
-		/*if (!p->pipe_latch[EX_LATCH][ii].valid &&
-			p->pipe_latch[EX_LATCH][ii].op_id != 
-			p->pipe_latch[ID_LATCH][ii].op_id &&
-			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg == 
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
-			!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest)) {
-			p->pipe_latch[EX_LATCH][ii].valid = true;
-		} */
-		/* printf("\nEX valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
+		p->pipe_latch[EX_LATCH][ii] = p->pipe_latch[ID_LATCH][ii];
+	
+		/*if (PIPE_WIDTH > 1) {
+			for (j = 0; j < PIPE_WIDTH; j++) {
+				if (pipe_array[j] != NULL &&
+				    ((p->pipe_latch[EX_LATCH][ii].op_id <
+					pipe_array[j]->pipe_latch[EX_LATCH][j].op_id &&
+					!pipe_array[j]->pipe_latch[EX_LATCH][j].stall) ||
+					(p->pipe_latch[EX_LATCH][ii].op_id <
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].op_id &&
+					!pipe_array[j]->pipe_latch[MEM_LATCH][j].stall) &&
+					p->pipe_latch[ID_LATCH][ii].stall &&
+					p->pipe_latch[EX_LATCH][ii].op_id == 
+					p->pipe_latch[ID_LATCH][ii].op_id &&
+					!(pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.src1_reg == 
+					p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+					!(pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.src2_reg ==
+					p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+					!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].tr_entry.cc_write) &&
+					!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].tr_entry.cc_write))) {
+					p->pipe_latch[ID_LATCH][ii].stall = false;
+					//p->pipe_latch[ID_LATCH][ii].valid = true;
+				}
+				if (pipe_array[j] != NULL &&
+				    ((p->pipe_latch[EX_LATCH][ii].op_id <
+					pipe_array[j]->pipe_latch[EX_LATCH][j].op_id &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].valid) ||
+					(p->pipe_latch[EX_LATCH][ii].op_id <
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].op_id &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].valid) &&
+					!p->pipe_latch[EX_LATCH][ii].valid &&
+					p->pipe_latch[EX_LATCH][ii].op_id != 
+					p->pipe_latch[ID_LATCH][ii].op_id &&
+					!(pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.src1_reg == 
+					p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+					!(pipe_array[j]->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
+					p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+					!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].tr_entry.cc_write) &&
+					!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].tr_entry.cc_write))) {
+					p->pipe_latch[EX_LATCH][ii].valid = true;
+				}
+			}
+		} else {*/
+			if (p->pipe_latch[ID_LATCH][ii].stall &&
+				p->pipe_latch[EX_LATCH][ii].op_id == 
+				p->pipe_latch[ID_LATCH][ii].op_id &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg == 
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.cc_write) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write)) {
+				p->pipe_latch[ID_LATCH][ii].stall = false;
+				//p->pipe_latch[ID_LATCH][ii].valid = true;
+			}
+			if (!p->pipe_latch[EX_LATCH][ii].valid &&
+				p->pipe_latch[EX_LATCH][ii].op_id != 
+				p->pipe_latch[ID_LATCH][ii].op_id &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg == 
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg ==
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.cc_write) &&
+				!(p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+				p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write)) {
+				p->pipe_latch[EX_LATCH][ii].valid = true;
+			}
+		//}
+		/*printf("\nEX valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			p->pipe_latch[EX_LATCH][ii].valid ? "true" : "false", 
 			p->pipe_latch[EX_LATCH][ii].op_id, 
 			p->pipe_latch[EX_LATCH][ii].stall ? "true" : "false", 
@@ -208,33 +286,86 @@ void pipe_cycle_EX(Pipeline *p){
 
 void pipe_cycle_ID(Pipeline *p){
 	int ii;
-	for(ii=0; ii<PIPE_WIDTH; ii++){
+	int j = 0;
+	for(ii = 0; ii < PIPE_WIDTH; ii++) {
 
-		if (!p->pipe_latch[ID_LATCH][ii].stall) {
+		if (!p->pipe_latch[ID_LATCH][ii].stall)
 			p->pipe_latch[ID_LATCH][ii] = p->pipe_latch[FE_LATCH][ii];
-			//printf("\nfetched from FE");
-		}
-		if (((p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed  &&
-			p->pipe_latch[EX_LATCH][ii].tr_entry.dest ==
-			p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg) ||
-			(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
-			p->pipe_latch[EX_LATCH][ii].tr_entry.dest ==
-			p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg) ||
-			(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed &&
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest == 
-			p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg) ||
-			(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
-			p->pipe_latch[MEM_LATCH][ii].tr_entry.dest == 
-			p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg) ||
-			(p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write &&
-			p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)) &&
-			(p->pipe_latch[EX_LATCH][ii].op_id !=
-			p->pipe_latch[ID_LATCH][ii].op_id)) {
-			p->pipe_latch[ID_LATCH][ii].stall = true;
-			p->pipe_latch[ID_LATCH][ii].valid = false;
-			//printf("\nchanged stall to true in ID : src1: %u", 
-			//p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed);
-			//last_op_stalled = p->pipe_latch[ID_LATCH][ii].op_id;
+
+		/* if(p->pipe_latch[MEM_LATCH][ii].tr_entry.br_dir &&
+			p->pipe_latch[MEM_LATCH][ii].valid)
+			cc_w++; */
+		if (PIPE_WIDTH > 1) {
+			for (j = 0; j < PIPE_WIDTH; j++) {
+				if (pipe_array[j] != NULL &&
+				    ((p->pipe_latch[ID_LATCH][ii].op_id >
+					pipe_array[j]->pipe_latch[ID_LATCH][j].op_id &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].stall) ||
+					(p->pipe_latch[ID_LATCH][ii].op_id >
+					pipe_array[j]->pipe_latch[EX_LATCH][j].op_id &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].stall)/* ||
+					(p->pipe_latch[ID_LATCH][ii].op_id >
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].op_id &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].stall)*/ ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed  &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].tr_entry.dest ==
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg && j != ii) ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
+					pipe_array[j]->pipe_latch[EX_LATCH][j].tr_entry.dest ==
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg && j != ii) ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].tr_entry.dest == 
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg && j != ii) ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
+					pipe_array[j]->pipe_latch[MEM_LATCH][j].tr_entry.dest == 
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg && j != ii) ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.dest ==
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].op_id !=
+					p->pipe_latch[ID_LATCH][ii].op_id) ||
+					(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.dest ==
+					p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg &&
+					pipe_array[j]->pipe_latch[ID_LATCH][j].op_id !=
+					p->pipe_latch[ID_LATCH][ii].op_id) ||
+					(pipe_array[j]->pipe_latch[EX_LATCH][j].tr_entry.cc_write &&
+					p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read) ||
+					(pipe_array[j]->pipe_latch[MEM_LATCH][j].tr_entry.cc_write &&
+					p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read) ||
+					(pipe_array[j]->pipe_latch[ID_LATCH][j].tr_entry.cc_write &&
+					p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read &&
+					p->pipe_latch[ID_LATCH][ii].op_id <
+					pipe_array[j]->pipe_latch[ID_LATCH][j].op_id)) &&
+					(p->pipe_latch[EX_LATCH][ii].op_id !=
+					p->pipe_latch[ID_LATCH][ii].op_id)) {
+					p->pipe_latch[ID_LATCH][ii].stall = true;
+					p->pipe_latch[ID_LATCH][ii].valid = false;
+				} 
+			}
+			j = 0;
+		} else {
+			if (((p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed  &&
+				p->pipe_latch[EX_LATCH][ii].tr_entry.dest ==
+				p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg) ||
+				(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
+				p->pipe_latch[EX_LATCH][ii].tr_entry.dest ==
+				p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg) ||
+				(p->pipe_latch[ID_LATCH][ii].tr_entry.src1_needed &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest == 
+				p->pipe_latch[ID_LATCH][ii].tr_entry.src1_reg) ||
+				(p->pipe_latch[ID_LATCH][ii].tr_entry.src2_needed &&
+				p->pipe_latch[MEM_LATCH][ii].tr_entry.dest == 
+				p->pipe_latch[ID_LATCH][ii].tr_entry.src2_reg) ||
+				(p->pipe_latch[MEM_LATCH][ii].tr_entry.cc_write &&
+				p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read) ||
+				(p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write &&
+				p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)) &&
+				(p->pipe_latch[EX_LATCH][ii].op_id !=
+				p->pipe_latch[ID_LATCH][ii].op_id)) {
+				p->pipe_latch[ID_LATCH][ii].stall = true;
+				p->pipe_latch[ID_LATCH][ii].valid = false;
+			}
 		}
 			
 		if(ENABLE_MEM_FWD){
@@ -259,11 +390,15 @@ void pipe_cycle_FE(Pipeline *p){
 	Pipeline_Latch fetch_op;
 	bool tr_read_success;
 
-	for(ii=0; ii<PIPE_WIDTH; ii++){
-		if (!p->pipe_latch[ID_LATCH][ii].stall ||
-			!(p->pipe_latch[ID_LATCH][ii].op_id ==
-			p->pipe_latch[EX_LATCH][ii].op_id))
+	for(ii=0; ii < PIPE_WIDTH; ii++){
+		if (!p->pipe_latch[ID_LATCH][ii].stall/* ||
+			/*p->pipe_latch[ID_LATCH][ii].op_id !=
+			p->pipe_latch[EX_LATCH][ii].op_id/* &&
+			!(p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write &&
+			p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)*/) {
 			pipe_get_fetch_op(p, &fetch_op);
+			pipe_array[ii] = p;	
+		}
 
 			
 		/* printf("\ninst_addr: %lu, op_type: %u, dest: %u, dest_needed: %u, src1_reg: %u, src2_reg: %u, src1_needed: %u, src2_needed: %u, cc_read: %u, cc_write: %u, mem_addr: %lu, mem_write: %u, mem_read: %u, br_dir: %u, br_target: %lu", 
@@ -282,16 +417,20 @@ void pipe_cycle_FE(Pipeline *p){
 			fetch_op.tr_entry.mem_read,   // Read
 			fetch_op.tr_entry.br_dir,     // Branch Direction Taken / Not Taken
 			fetch_op.tr_entry.br_target);  // Target Address of Branch */
-		if(BPRED_POLICY){
+		if (BPRED_POLICY){
 			pipe_check_bpred(p, &fetch_op);
 		}
 		
 		// copy the op in FE LATCH
 		//if (!p->pipe_latch[ID_LATCH][ii].stall)
-		if (!p->pipe_latch[ID_LATCH][ii].stall ||
-			!(p->pipe_latch[ID_LATCH][ii].op_id ==
-			p->pipe_latch[EX_LATCH][ii].op_id))
+		if (!p->pipe_latch[ID_LATCH][ii].stall/* ||
+			/*p->pipe_latch[ID_LATCH][ii].op_id !=
+			p->pipe_latch[EX_LATCH][ii].op_id/* &&
+			!(p->pipe_latch[EX_LATCH][ii].tr_entry.cc_write &&
+			p->pipe_latch[ID_LATCH][ii].tr_entry.cc_read)*/) {
 			p->pipe_latch[FE_LATCH][ii] = fetch_op;
+			pipe_array[ii]->pipe_latch[FE_LATCH][ii] = fetch_op;
+		}
 		/* printf("\nFE valid: %s, op_id: %lu, stall: %s, is_mispred_cbr: %s", 
 			fetch_op.valid ? "true" : "false", 
 			fetch_op.op_id, 
